@@ -1,75 +1,66 @@
-#include "ble.h"
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
 
-BLECharacteristic *characteristicMessage;
+// UUIDジェネレータ↓
+// https://www.uuidgenerator.net/
+
+#define SERVICE_UUID        "63d6672b-986b-406f-9f6f-6a712d015e04"
+#define CHARACTERISTIC_UUID "2ec43578-5fcd-4c0e-8758-ffeb77537a83"
+static int LED_PIN = 13;
 
 
-class MyServerCallbacks : public BLEServerCallbacks
+
+class MyCallbacks : public BLECharacteristicCallbacks
 {
-  void onConnect(BLEServer *server)
+  void onWrite(BLECharacteristic* pCharacteristic)
   {
-    Serial.println("Connected");
-  };
-  
-  void onDisconnect(BLEServer *server)
-  {
-    Serial.println("Disconnected");
+    std::string value = pCharacteristic->getValue();
+    
+    if(value.length() > 0)
+    {
+      String ledState = value.c_str();
+      Serial.println(ledState);
+      if (ledState == "0")
+      {
+        digitalWrite(LED_PIN, LOW);
+      }
+      else if(ledState == "1")
+      {
+        digitalWrite(LED_PIN, HIGH);
+      }
+    }
   }
 };
 
-class MessageCallbacks : public BLECharacteristicCallbacks
+
+void setup()
 {
-  void onWrite(BLECharacteristic *characteristic)
-  {
-    std::string data = characteristic->getValue();
-    Serial.println(data.c_str());
-  }
-  
-  void onRead(BLECharacteristic *characteristic)
-  {
-    characteristic->setValue("Foobar");
-  }
-};
-
-
-
-
-void setup() {
   Serial.begin(115200);
 
-  // Setup BLE Server
-  BLEDevice::init(DEVICE_NAME);
-  BLEServer *server = BLEDevice::createServer();
-  server->setCallbacks(new MyServerCallbacks());
+  pinMode(LED_PIN, OUTPUT);
 
-  // Register message service that can receive messages and reply with a static message.
-  BLEService *service = server->createService(SERVICE_UUID);
-  characteristicMessage = service->createCharacteristic(MESSAGE_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_WRITE);
-  characteristicMessage->setCallbacks(new MessageCallbacks());
-  characteristicMessage->addDescriptor(new BLE2902());
-  service->start();
+  BLEDevice::init("ESP32_BLE_SERVER"); // この名前がスマホなどに表示される
+  BLEServer* pServer = BLEDevice::createServer();
+  BLEService* pService = pServer->createService(SERVICE_UUID);
+  BLECharacteristic* pCharacteristic = pService->createCharacteristic(
+    CHARACTERISTIC_UUID,
+    BLECharacteristic::PROPERTY_READ |
+    BLECharacteristic::PROPERTY_WRITE
+  ); // キャラクタリスティックの作成　→　「僕はこんなデータをやり取りするよできるよ」的な宣言
 
-  // Register device info service, that contains the device's UUID, manufacturer and name.
-  service = server->createService(DEVINFO_UUID);
-  BLECharacteristic *characteristic = service->createCharacteristic(DEVINFO_MANUFACTURER_UUID, BLECharacteristic::PROPERTY_READ);
-  characteristic->setValue(DEVICE_MANUFACTURER);
-  characteristic = service->createCharacteristic(DEVINFO_NAME_UUID, BLECharacteristic::PROPERTY_READ);
-  characteristic->setValue(DEVICE_NAME);
-  characteristic = service->createCharacteristic(DEVINFO_SERIAL_UUID, BLECharacteristic::PROPERTY_READ);
-  String chipId = String((uint32_t)(ESP.getEfuseMac() >> 24), HEX);
-  characteristic->setValue(chipId.c_str());
-  service->start();
-
-  // Advertise services
-  BLEAdvertising *advertisement = server->getAdvertising();
-  BLEAdvertisementData adv;
-  adv.setName(DEVICE_NAME);
-  adv.setCompleteServices(BLEUUID(SERVICE_UUID));
-  advertisement->setAdvertisementData(adv);
-  advertisement->start();
-
-  Serial.println("Ready");
+  pCharacteristic->setCallbacks(new MyCallbacks());
+  pService->start();
+  BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x06);  // iPhone接続の問題に役立つ
+  pAdvertising->setMinPreferred(0x12);
+  BLEDevice::startAdvertising();
+  Serial.println("Characteristic defined! Now you can read it in your phone!");
 }
 
-void loop() {
-  delay(1000);
+void loop()
+{
+  delay(2000);
 }

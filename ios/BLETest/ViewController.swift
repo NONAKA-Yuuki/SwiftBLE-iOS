@@ -1,109 +1,165 @@
 import UIKit
 import CoreBluetooth
 
-var myPeripheal:CBPeripheral?
-var myCharacteristic:CBCharacteristic?
-var manager:CBCentralManager?
+class BleLedBlinkerViewController: UIViewController {
 
-let serviceUUID = CBUUID(string: "ab0828b1-198e-4351-b779-901fa0e0371e")
-let periphealUUID = CBUUID(string: "24517CE4-2DC1-6489-39A4-672BBE4344DF")
+    @IBOutlet weak var ledButton:UIButton!
+    
 
-class ViewController: UIViewController, CBCentralManagerDelegate {
+    let kUARTServiceUUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b" // サービス
+    let kTXCharacteristicUUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8" // ペリフェラルへ送信用
 
-    @IBOutlet weak var connectButton: UIButton!
-    @IBOutlet weak var sendText1Button: UIButton!
-    @IBOutlet weak var sendText2Button: UIButton!
-    @IBOutlet weak var disconnectButton: UIButton!
+    var centralManager: CBCentralManager!
+    var peripheral: CBPeripheral!
+    var serviceUUID : CBUUID!
+    var kTXCBCharacteristic: CBCharacteristic?
+    var charcteristicUUIDs: [CBUUID]!
+
+    var stateLed: Bool = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        manager = CBCentralManager(delegate: self, queue: nil)
+        ledButton.setTitleColor(.gray, for: .normal)
+        setup()
     }
 
-    @IBAction func scanButtonTouched(_ sender: Any) {
-        manager?.stopScan()
-        manager?.scanForPeripherals(withServices:[serviceUUID], options: nil)
-    }
     
-    @IBAction func sendText1Touched(_ sender: Any) {
-        sendText(text: "HeyHo")
-    }
     
-    @IBAction func sendText2Touched(_ sender: Any) {
-        sendText(text: "Foobar")
-    }
+    private func setup() {
+        print("setup...")
+
+        centralManager = CBCentralManager()
+        centralManager.delegate = self as CBCentralManagerDelegate
+
+        serviceUUID = CBUUID(string: kUARTServiceUUID)
+        charcteristicUUIDs = [CBUUID(string: kTXCharacteristicUUID)]
+   }
     
-    @IBAction func disconnectTouched(_ sender: Any) {
-        manager?.cancelPeripheralConnection(myPeripheal!)
-    }
-    
-    func sendText(text: String) {
-        if (myPeripheal != nil && myCharacteristic != nil) {
-            let data = text.data(using: .utf8)
-            myPeripheal!.writeValue(data!,  for: myCharacteristic!, type: CBCharacteristicWriteType.withResponse)
+    @IBAction func tappedLed(_ sender:UIButton) {
+        guard let peripheral = self.peripheral else {
+            return
         }
-    }
-    
-    func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
-        if peripheral.identifier.uuidString == periphealUUID.uuidString {
-            myPeripheal = peripheral
-            myPeripheal?.delegate = self
-            manager?.connect(myPeripheal!, options: nil)
-            manager?.stopScan()
+        
+        guard let kTXCBCharacteristic = kTXCBCharacteristic else {
+            return
         }
+
+        var str:String!
+        self.stateLed = !self.stateLed
+        if self.stateLed {
+            sender.setTitleColor(.orange, for: .normal)
+            str = "1"
+        } else{
+            sender.setTitleColor(.gray, for: .normal)
+            str = "0"
+        }
+
+        let writeData = str.data(using: .utf8)!
+        peripheral.writeValue(writeData, for: kTXCBCharacteristic, type: .withResponse)
     }
+
+
+}
+
+
+
+//MARK : - CBCentralManagerDelegate
+extension BleLedBlinkerViewController: CBCentralManagerDelegate {
     
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        print("CentralManager didUpdateState")
+
         switch central.state {
-        case .poweredOff:
-            print("Bluetooth is switched off")
-        case .poweredOn:
-            print("Bluetooth is switched on")
-        case .unsupported:
-            print("Bluetooth is not supported")
+            
+        //電源ONを待って、スキャンする
+        case CBManagerState.poweredOn:
+            let services: [CBUUID] = [serviceUUID]
+            centralManager?.scanForPeripherals(withServices: services,
+                                               options: nil)
         default:
-            print("Unknown state")
+            break
         }
     }
     
-    func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+    /// ペリフェラルを発見すると呼ばれる
+    func centralManager(_ central: CBCentralManager,
+                        didDiscover peripheral: CBPeripheral,
+                        advertisementData: [String : Any],
+                        rssi RSSI: NSNumber) {
+        
+        self.peripheral = peripheral
+        centralManager?.stopScan()
+        
+        //接続開始
+        central.connect(peripheral, options: nil)
+        print("  - centralManager didDiscover")
+    }
+    
+    /// 接続されると呼ばれる
+    func centralManager(_ central: CBCentralManager,
+                        didConnect peripheral: CBPeripheral) {
+        
+        peripheral.delegate = self
         peripheral.discoverServices([serviceUUID])
-        print("Connected to " +  peripheral.name!)
-        
-        connectButton.isEnabled = false
-        disconnectButton.isEnabled = true
-        sendText1Button.isHidden = false
-        sendText2Button.isHidden = false
+        print("  - centralManager didConnect")
     }
     
+    /// 切断されると呼ばれる？
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        print("Disconnected from " +  peripheral.name!)
-        
-        myPeripheal = nil
-        myCharacteristic = nil
-        
-        connectButton.isEnabled = true
-        disconnectButton.isEnabled = false
-        sendText1Button.isHidden = true
-        sendText2Button.isHidden = true
-    }
-    
-    func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-        print(error!)
+        print(#function)
+        if error != nil {
+            print(error.debugDescription)
+            setup() // リトライ
+            return
+        }
     }
 }
 
-extension ViewController: CBPeripheralDelegate {
-    func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        guard let services = peripheral.services else { return }
+//MARK : - CBPeripheralDelegate
+extension BleLedBlinkerViewController: CBPeripheralDelegate {
+    
+    /// サービス発見時に呼ばれる
+    func peripheral(_ peripheral: CBPeripheral,
+                    didDiscoverServices error: Error?) {
         
-        for service in services {
-            peripheral.discoverCharacteristics(nil, for: service)
+        if error != nil {
+            print(error.debugDescription)
+            return
+        }
+        
+        //キャリアクタリスティク探索開始
+        if let service = peripheral.services?.first {
+            print("Searching characteristic...")
+            peripheral.discoverCharacteristics(charcteristicUUIDs,
+                                               for: service)
         }
     }
     
+    /// キャリアクタリスティク発見時に呼ばれる
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        guard let characteristics = service.characteristics else { return }
-        myCharacteristic = characteristics[0]
+        
+        if error != nil {
+            print(error.debugDescription)
+            return
+        }
+
+        for characteristics in service.characteristics! {
+            if(characteristics.uuid == CBUUID(string: kTXCharacteristicUUID)) {
+//                peripheral.setNotifyValue(true, for: (service.characteristics?[1])!)
+                self.kTXCBCharacteristic = characteristics
+            }
+        }
+        
+        print("  - Characteristic didDiscovered")
+
+    }
+    
+    /// データ送信時に呼ばれる
+    func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+        print(#function)
+        if error != nil {
+            print(error.debugDescription)
+            return
+        }
     }
 }
