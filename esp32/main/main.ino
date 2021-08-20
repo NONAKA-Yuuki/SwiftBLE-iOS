@@ -24,10 +24,12 @@ class MyCallbacks : public BLECharacteristicCallbacks
       if (ledState == "0")
       {
         digitalWrite(LED_PIN, LOW);
+        Serial.println("ON");
       }
       else if(ledState == "1")
       {
         digitalWrite(LED_PIN, HIGH);
+        Serial.println("OFF");
       }
     }
   }
