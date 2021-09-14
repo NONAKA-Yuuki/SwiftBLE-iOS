@@ -7,7 +7,9 @@
 
 #define SERVICE_UUID        "63d6672b-986b-406f-9f6f-6a712d015e04"
 #define CHARACTERISTIC_UUID "2ec43578-5fcd-4c0e-8758-ffeb77537a83"
-static int LED_PIN = 13;
+
+
+const int LED_PIN = 13;
 
 
 
