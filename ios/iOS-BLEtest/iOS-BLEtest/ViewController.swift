@@ -39,7 +39,8 @@ class ViewController: UIViewController {
         characteristicUUIDs = [CBUUID(string: kTXCharacteristicUUID)]
     }
     
-    @IBAction func tappedLed(_ sender:UIButton) {
+    @IBAction func changeLEDstate(_ sender: UIButton) {
+        print("tapped")
         guard let peripheral = self.peripheral else {
             return
         }
@@ -61,7 +62,6 @@ class ViewController: UIViewController {
         let writeData = str.data(using: .utf8)!
         peripheral.writeValue(writeData, for: kTXCBCharacteristic, type: .withResponse)
     }
-
 }
 
 

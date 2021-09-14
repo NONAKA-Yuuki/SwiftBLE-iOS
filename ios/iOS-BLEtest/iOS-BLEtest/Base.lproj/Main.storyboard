@@ -20,6 +20,9 @@
                                 <rect key="frame" x="162" y="421" width="90" height="54"/>
                                 <fontDescription key="fontDescription" type="system" pointSize="35"/>
                                 <state key="normal" title="Lチカ"/>
+                                <connections>
+                                    <action selector="changeLEDstate:" destination="BYZ-38-t0r" eventType="touchUpInside" id="WDA-gl-Kgr"/>
+                                </connections>
                             </button>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
